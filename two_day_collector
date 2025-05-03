@@ -1,0 +1,84 @@
+import os
+import time
+import csv
+from scapy.all import sniff, IP, TCP, UDP
+from datetime import datetime
+
+# === Configuration Settings ===
+# Duration of each capture session in seconds (10 minutes)
+capture_duration_seconds = 600  
+
+# Directory where CSV files will be saved
+output_folder = "network_logs"
+
+# CSV column headers
+fields = ["timestamp", "src_ip", "dst_ip", "protocol", "src_port", "dst_port", "length"]
+
+# Create the output directory if it doesn't already exist
+os.makedirs(output_folder, exist_ok=True)
+
+# === Packet Processing Function ===
+def process_packet(packet):
+
+"""
+    Extracts relevant information from a network packet.
+    Returns a list containing timestamp, source/destination IPs and ports, protocol, and packet length.
+    """
+    if IP in packet:
+        proto = "OTHER"
+        src_port, dst_port = "-", "-"
+
+        # Check for TCP packets
+        if TCP in packet:
+            proto = "TCP"
+            src_port = packet[TCP].sport
+            dst_port = packet[TCP].dport
+
+# Check for UDP packets
+        elif UDP in packet:
+            proto = "UDP"
+            src_port = packet[UDP].sport
+            dst_port = packet[UDP].dport
+
+        # Return structured data
+        return [
+            datetime.now().isoformat(),
+            packet[IP].src,
+            packet[IP].dst,
+            proto,
+            src_port,
+            dst_port,
+            len(packet)
+        ]
+    return None    # Skip packets that don't have an IP layer
+
+# === Continuous Packet Capture ===
+def capture_packets():
+    print("[*] Two-Day Collector started. Saving every 10 minutes... Press Ctrl+C to stop.")
+    try:
+        while True:
+            # Create a timestamped filename for each capture session
+            filename = f"capture_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            filepath = os.path.join(output_folder, filename)
+    
+        # Open the file for writing
+            with open(filepath, mode='w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(fields)
+       
+      # Capture packets for the specified duration
+                packets = sniff(timeout=capture_duration_seconds)
+               
+      # Process and write each packet to the CSV
+                for packet in packets:
+                    data = process_packet(packet)
+                    if data:
+                        writer.writerow(data)
+
+            print(f"[+] Saved: {filename}")
+
+    except KeyboardInterrupt:
+        print("\n[*] Capture manually stopped by user.")
+
+if __name__ == "__main__":
+    capture_packets()
